@@ -203,20 +203,20 @@ def event_statistics(event: Event):
     with ui.row():
         make_element("list", "blue", "expected")
         make_element("done", "green", "shows")
-        make_element("error", "red", "noshows")
-        make_element("cancel", "grey", "cancelled")
+        make_element("remove_circle_outline", "grey", "noshows")
+        make_element("delete", "grey", "cancelled")
         make_element("question_mark", "grey", "unknown")
 
 
 @ui.refreshable
 def reservation_list(event: Event):
-    with ui.grid(columns="2fr 1fr 1fr 1fr 1fr 1fr").classes("gap-0 w-full"):
+    with ui.grid(columns="2fr 50px 50px 100px 1fr 1fr").classes("gap-0 w-full"):
         ui.label("name") 
         ui.label("cancel")
         ui.label("showed")
         ui.label("medium")
-        ui.label("note")
-        ui.label("p. note")
+        ui.label("event note")
+        ui.label("participant note")
         for reservation in event.reservations:
             participant = reservation.participant
             ui.label(participant.all_names())
@@ -297,7 +297,7 @@ def newevent():
             model.events.append(e)
             for p in model.participants:
                 if p.add_default:
-                    model.reservations.append(Reservation.make(event=e, participant=p))
+                    model.reservations.append(Reservation.make(event=e, participant=p, source="auto"))
             ui.navigate.to(f"/event/{d}")
     ui.button("Add", on_click=create)
 
@@ -344,7 +344,7 @@ def participants():
 
 @ui.page("/settings")
 def settings():
-    pass
+    navbar("settings")
 
                  
 @ui.page("/")
@@ -367,7 +367,7 @@ def main():
     args = parse_args()
     data_store = BackupSave(folder=args.folder, basename="data.json", validator=Model.model_validate_json)
     load(data_store)
-    ui.timer(10.0, lambda: save(data_store))
+    ui.timer(60.0, lambda: save(data_store))
     app.on_shutdown(lambda: save(data_store))
     ui.run(host=args.host)
 
