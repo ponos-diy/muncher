@@ -119,6 +119,9 @@ class Reservation(BaseModel):
         participant.reservations.append(r)
         return r
 
+    def connect(self):
+        self.event.reservations.append(self)
+        self.participant.reservations.append(self)
 
 class Model(BaseModel):
     sources: list[str] = list()
@@ -154,11 +157,23 @@ class Model(BaseModel):
 
     def get_reservation(self, event: Event, participant: Participant):
         for r in self.reservations:
-            print(self.reservations)
             if r.event == event and r.participant == participant:
                 return r
         else:
             raise KeyError()
+
+    def get_participant_by_name(self, name: str, name_source: str) -> Participant:
+        for p in self.participants:
+            if name_source in p.names.keys() and p.names[name_source] == name:
+                return p
+        else:
+            raise KeyError(name)
+
+    def bulk_add(self, participants: list[Participant], reservations: list[Reservation]):
+        self.participants += participants
+        self.reservations += reservations
+        for reservation in reservations:
+            reservation.connect()
 
 model = Model()
 
@@ -188,8 +203,7 @@ def connect():
     for reservation in model.reservations:
         reservation.event = model.event_by_uid(reservation.event_uid)
         reservation.participant = model.participant_by_uid(reservation.participant_uid)
-        reservation.event.reservations.append(reservation)
-        reservation.participant.reservations.append(reservation)
+        reservation.connect()
 
 
 def save(data_store):
@@ -210,7 +224,7 @@ def event_statistics(event: Event):
 
 @ui.refreshable
 def reservation_list(event: Event):
-    with ui.grid(columns="2fr 50px 50px 100px 1fr 1fr").classes("gap-0 w-full"):
+    with ui.grid(columns="2fr 50px 120px 100px 1fr 1fr").classes("gap-0 w-full"):
         ui.label("name") 
         ui.label("cancel")
         ui.label("showed")
@@ -221,8 +235,8 @@ def reservation_list(event: Event):
             participant = reservation.participant
             ui.label(participant.all_names())
             ui.checkbox("").bind_value(reservation, "cancelled")
-            #ui.toggle({ShowedUp.unknown: "?", ShowedUp.showed: "Y", ShowedUp.noshow: "N"}, on_change=event.calculate_statistics()).bind_value(reservation, "showed_up")
-            ui.select({ShowedUp.unknown: "?", ShowedUp.showed: "Y", ShowedUp.noshow: "N"}, on_change=event.calculate_statistics()).bind_value(reservation, "showed_up")
+            ui.toggle({ShowedUp.unknown: "?", ShowedUp.showed: "Y", ShowedUp.noshow: "N"}, on_change=event.calculate_statistics()).bind_value(reservation, "showed_up")
+            #ui.select({ShowedUp.unknown: "?", ShowedUp.showed: "Y", ShowedUp.noshow: "N"}, on_change=event.calculate_statistics()).bind_value(reservation, "showed_up")
             ui.label(reservation.source)
             ui.input().bind_value(reservation, "note")
             ui.input().bind_value(participant, "note")
@@ -246,6 +260,7 @@ def add_reservation(event: Event):
                 ui.notify("participant already added", type="negative")
 
         ui.button("Add", on_click=add_participant)
+
 
 def get_event_dates():
     dates_future = sorted((event.date for event in model.events if event.date + datetime.timedelta(days=2) > datetime.date.today()))
@@ -281,6 +296,7 @@ def event_page(date: str):
         event_statistics(event)
         reservation_list(event)
         add_reservation(event)
+        bulk_import_button(event)
 
 
 @ui.page("/newevent")
@@ -326,6 +342,79 @@ def add_participant():
             participant_list.refresh()
     ui.button("add", on_click=save)
     ui.label("")
+
+class ImportFailed(RuntimeError):
+    pass
+
+def import_auto(data):
+    raise ImportFailed("automatic import not implemented yet")
+
+
+async def import_fl(data: str, event: Event):
+    new_participants = []
+    new_reservations = []
+    import_names = []
+    for line in data.splitlines():
+        name = line
+        import_names.append(name)
+
+    with ui.dialog() as confirm_dialog, ui.card():
+        with ui.grid(columns=3):
+            ui.label("name")
+            ui.icon("people")
+            ui.icon("event")
+
+            for name in import_names:
+                ui.label(name)
+                try:
+                    p = model.get_participant_by_name(name, name_source="FL")
+                    ui.icon("check", color="grey")
+                except KeyError:
+                    p = Participant(names={"FL": name})
+                    new_participants.append(p)
+                    ui.icon("add_circle", color="green")
+
+                try:
+                    r = model.get_reservation(event=event, participant=p)
+                    ui.icon("check", color="grey")
+                except KeyError:
+                    r = Reservation(event=event, participant=p, event_uid=event.uid, participant_uid=p.uid, source="FL-import")
+                    new_reservations.append(r)
+                    ui.icon("add_circle", color="green")
+        with ui.row():
+            ui.button("Import", icon="check", color="green", on_click=lambda: confirm_dialog.submit(True))
+            ui.button("Cancel", icon="cancel", color="red", on_click=lambda: confirm_dialog.submit(False))
+
+    confirmed = await confirm_dialog
+    if confirmed:
+        model.bulk_add(new_participants, new_reservations)
+        ui.navigate.reload()
+        ui.notify("Imported")
+    else:
+        ui.notify("Import canceled", type="negative")
+    confirm_dialog.clear()
+
+
+import_tools = {
+        #"auto": import_auto,
+        "FL": import_fl,
+        }
+
+def bulk_import_button(event: Event):
+    with ui.dialog() as dialog, ui.card():
+        ui.label("Import")
+        with ui.row():
+            for name, f in import_tools.items():
+                async def func():
+                    try:
+                        await f(textarea.value, event)
+                    except ImportFailed as e:
+                        ui.notify(f"Import failed: {e}", type="negative")
+                    dialog.close()
+                ui.button(f"import ({name})", icon="file_upload", on_click=func)
+            ui.button("Cancel", icon="cancel", on_click=dialog.close)
+        textarea = ui.textarea(label="import text")
+    ui.button("import", icon="file_upload", on_click=dialog.open)
 
  
 
