@@ -8,6 +8,8 @@ import json
 from pydantic import BaseModel, Field, computed_field
 from nicegui import app, ui
 
+from backup_save import BackupSave
+
 class Test(BaseModel):
     internal_value: bool = Field(default=False, exclude=True)
 
@@ -160,12 +162,11 @@ class Model(BaseModel):
 
 model = Model()
 
-def load(filename):
+def load(data_store):
     global model
     try:
-        with open(filename, "r") as f:
-            model = Model.model_validate_json(f.read())
-    except FileNotFoundError:
+        model = data_store.load()
+    except RuntimeError:
         print("unable to load json")
         model = Model()
         add_example_data()
@@ -191,9 +192,8 @@ def connect():
         reservation.participant.reservations.append(reservation)
 
 
-def save(filename):
-    with open(filename, "w") as f:
-        f.write(model.model_dump_json(indent=2))
+def save(data_store):
+    data_store.save(model.model_dump_json(indent=2))
 
 def event_statistics(event: Event):
     def make_element(icon, color, data_field):
@@ -221,7 +221,8 @@ def reservation_list(event: Event):
             participant = reservation.participant
             ui.label(participant.all_names())
             ui.checkbox("").bind_value(reservation, "cancelled")
-            ui.toggle({ShowedUp.unknown: "?", ShowedUp.showed: "Y", ShowedUp.noshow: "N"}, on_change=event.calculate_statistics()).bind_value(reservation, "showed_up")
+            #ui.toggle({ShowedUp.unknown: "?", ShowedUp.showed: "Y", ShowedUp.noshow: "N"}, on_change=event.calculate_statistics()).bind_value(reservation, "showed_up")
+            ui.select({ShowedUp.unknown: "?", ShowedUp.showed: "Y", ShowedUp.noshow: "N"}, on_change=event.calculate_statistics()).bind_value(reservation, "showed_up")
             ui.label(reservation.source)
             ui.input().bind_value(reservation, "note")
             ui.input().bind_value(participant, "note")
@@ -258,6 +259,7 @@ def navbar(title: str):
         with ui.row():
             ui.button(on_click=lambda: ui.navigate.to("/newevent"), icon='add')
             ui.button(on_click=lambda: ui.navigate.to("/participants"), icon='people')
+            ui.button(on_click=lambda: ui.navigate.to("/settings"), icon='settings')
 
             with ui.button(icon="event"):
                 with ui.menu() as menu:
@@ -340,20 +342,32 @@ def participants():
         add_participant()
 
 
+@ui.page("/settings")
+def settings():
+    pass
 
                  
 @ui.page("/")
-async def index():
-    ui.label("hi")
+def index():
+    future_events, _ = get_event_dates()
+    if len(future_events) > 0:
+        ui.navigate.to(f"/event/{future_events[0]}")
+    else:
+        navbar("homepage")
+        ui.label("no future events planned")
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("host", type=str, default=None)
+    parser.add_argument("--host", type=str, default=None)
+    parser.add_argument("--folder", type=str, default="data", required=False)
     return parser.parse_args()
+
 
 def main():
     args = parse_args()
-    load("data.json")
+    data_store = BackupSave(folder=args.folder, basename="data.json", validator=Model.model_validate_json)
+    load(data_store)
+    app.on_shutdown(lambda: save(data_store))
     ui.run(host=args.host)
 
 main()
