@@ -132,6 +132,10 @@ class Model(BaseModel):
     events: list[Event] = list()
     reservations: list[Reservation] = list()
 
+    auto_purge_participants: bool = False
+    auto_remove_events: bool = False
+    auto_remove_events_after_days: int = 365
+
     def object_by_uid(self, objects, uid: UUID):
         for o in objects:
             if o.uid == uid:
@@ -484,6 +488,16 @@ def purge_participant_button():
             participant_list.refresh()
     ui.button("purge participants with no events", icon="delete", color="warning", on_click=purge)
 
+
+def auto_clean_action():
+    if model.auto_remove_events:
+        events_to_remove = [event for event in model.events if (datetime.date.today()-event.date).days > model.auto_remove_events_after_days]
+        for event in events_to_remove:
+            model.remove_event(event)
+    if model.auto_purge_participants:
+        model.purge_participants()
+
+
 @ui.page("/participants")
 def participants():
     with navbar("participant list"):
@@ -527,6 +541,15 @@ def settings():
         def apply_sources():
             model.sources = sources.value.split(",")
         ui.button("update", icon="save", on_click=apply_sources)
+
+    ui.separator()
+
+    ui.checkbox("auto-purge participants when they have no reservations").bind_value(model, "auto_purge_participants")
+    ui.checkbox("auto-remove events after some time").bind_value(model, "auto_remove_events")
+    ui.number("auto remove after N days", min=1, precision=0).bind_value(model, "auto_remove_events_after_days").bind_enabled(model, "auto_remove_events")
+    ui.button("perform auto clean now", icon="delete_sweep", on_click=auto_clean_action)
+
+    ui.separator()
 
     with ui.row():
         ui.button("download backup", icon="download", on_click=lambda: ui.download("/backup"))
@@ -591,9 +614,10 @@ def main():
     args = parse_args()
     data_store = BackupSave(folder=args.folder, basename="data.json", validator=Model.model_validate_json)
     load(data_store)
-    ui.timer(60.0, lambda: save(data_store))
+    ui.timer(10.0, lambda: save(data_store))
+    ui.timer(24*3600.0, auto_clean_action)
     app.on_shutdown(lambda: save(data_store))
-    ui.run(host=args.host)
+    ui.run(host=args.host, title="muncher")
 
 main()
 
