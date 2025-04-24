@@ -263,8 +263,8 @@ def reservation_list(event: Event):
             ui.toggle({ShowedUp.unknown: "?", ShowedUp.showed: "Y", ShowedUp.noshow: "N"}, on_change=event.calculate_statistics()).bind_value(reservation, "showed_up")
             #ui.select({ShowedUp.unknown: "?", ShowedUp.showed: "Y", ShowedUp.noshow: "N"}, on_change=event.calculate_statistics()).bind_value(reservation, "showed_up")
             ui.label(reservation.source)
-            ui.input().bind_value(reservation, "note")
-            ui.input().bind_value(participant, "note")
+            ui.input().props("dense").bind_value(reservation, "note")
+            ui.input().props("dense").bind_value(participant, "note")
 
 def add_reservation(event: Event):
     with ui.row():
