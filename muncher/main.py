@@ -46,7 +46,7 @@ class Participant(BaseModel):
     reservations: "Reservation" = Field(default_factory=list, exclude=True)
 
     def all_names(self) -> str:
-        return "/".join(self.names.values())
+        return "/".join((n for n in self.names.values() if n))
 
 class Event(BaseModel):
     uid: UUID = Field(default_factory=uuid4)
@@ -177,6 +177,14 @@ class Model(BaseModel):
         for reservation in reservations:
             reservation.connect()
 
+    def remove_event(self, event: Event):
+        self.events.remove(event)
+        self.reservations = [r for r in self.reservations if r.event != event]
+
+    def purge_participants(self):
+        self.participants = [p for p in self.participants if len(p.reservations) > 0]
+
+
 model = Model()
 
 def load(data_store):
@@ -217,7 +225,7 @@ statistics_colors = {
         "total": "blue",
         "expected": "blue",
         "shows": "green",
-        "noshows": "lightyellow",
+        "noshows": "yellow",
         "cancelled": "lightgrey",
         "unknown": "grey",
         }
@@ -324,7 +332,7 @@ def edit_event_dialog(event: Event):
         async def delete():
             really_delete = await wait_confirm(f"Do you really want to delete the event at {event.date}?", ok_icon="delete", ok_text="Delete")
             if really_delete:
-                remove_event(event)
+                model.remove_event(event)
                 ui.navigate.to("/")
             edit_dialog.close()
         with ui.row():
@@ -468,18 +476,11 @@ def bulk_import_button(event: Event):
         textarea = ui.textarea(label="import text")
     ui.button("import", icon="file_upload", on_click=dialog.open)
 
-def remove_event(event: Event):
-    model.events.remove(event)
-    model.reservations = [r for r in model.reservations if r.event != event]
-
-def purge_participants():
-    model.participants = [p for p in model.participants if len(p.reservations) > 0]
-
 def purge_participant_button():
     async def purge():
         really_purge = await wait_confirm("Do you really want to purge the participant list?", ok_text="purge", ok_icon="delete")
         if really_purge:
-            purge_participants()
+            model.purge_participants()
             participant_list.refresh()
     ui.button("purge participants with no events", icon="delete", color="warning", on_click=purge)
 
@@ -515,14 +516,27 @@ def settings():
     with navbar("settings"):
         pass
 
-    ui.button("download backup", icon="download", on_click=lambda: ui.download("/backup"))
-    ui.upload(on_upload=restore_backup, label="restore backup", multiple=False, max_files=1)
+    with ui.row():
+        name_fields = ui.input("name fields", value=",".join(model.known_names))
+        def apply_name_fields():
+            model.known_names = name_fields.value.split(",")
+        ui.button("update", icon="save", on_click=apply_name_fields)
+
+    with ui.row():
+        sources = ui.input("reservation sources", value=",".join(model.sources))
+        def apply_sources():
+            model.sources = sources.value.split(",")
+        ui.button("update", icon="save", on_click=apply_sources)
+
+    with ui.row():
+        ui.button("download backup", icon="download", on_click=lambda: ui.download("/backup"))
+        ui.upload(on_upload=restore_backup, label="restore backup", multiple=False, max_files=1)
 
 @ui.page("/statistics")
 def statistics():
     with navbar("statistics"):
         pass
-    fields = ("total", "cancelled", "shows", "noshows", "unknown")
+    fields = ("total", "shows", "noshows", "unknown", "cancelled")
     with ui.grid(columns=1+len(fields)):
         ui.label("date")
         for f in fields:
