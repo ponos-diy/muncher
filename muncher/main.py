@@ -81,28 +81,29 @@ class Reservation(BaseModel):
     added_time: datetime.datetime = Field(default_factory=datetime.datetime.now)
     source: Optional[str]
 
-    _cancelled: bool = False
+    cancelled_internal: bool = False
+
     @computed_field
     @property
     def cancelled(self) -> bool:
-        return self._cancelled
+        return self.cancelled_internal
 
     @cancelled.setter
     def cancelled(self, value: bool):
-        self._cancelled = value
+        self.cancelled_internal = value
         self.event.calculate_statistics()
 
     
 
-    _showed_up: ShowedUp = ShowedUp.unknown
+    showed_up_internal: ShowedUp = ShowedUp.unknown
     @computed_field
     @property
     def showed_up(self) -> ShowedUp:
-        return self._showed_up
+        return self.showed_up_internal
 
     @showed_up.setter
     def showed_up(self, value: ShowedUp):
-        self._showed_up = value
+        self.showed_up_internal = value
         self.event.calculate_statistics()
 
     note: str = ""
@@ -205,6 +206,8 @@ def connect():
         reservation.event = model.event_by_uid(reservation.event_uid)
         reservation.participant = model.participant_by_uid(reservation.participant_uid)
         reservation.connect()
+    for event in model.events:
+        event.calculate_statistics()
 
 
 def save(data_store):
