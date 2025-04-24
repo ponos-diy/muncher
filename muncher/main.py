@@ -4,6 +4,7 @@ import argparse
 from typing import Optional
 from uuid import UUID, uuid4
 import json
+from contextlib import contextmanager
 
 from pydantic import BaseModel, Field, computed_field
 from nicegui import app, ui
@@ -267,11 +268,13 @@ def get_event_dates():
     dates_past = reversed(sorted((event.date for event in model.events if event.date + datetime.timedelta(days=2) <= datetime.date.today())))
     return dates_future, dates_past
 
+@contextmanager
 def navbar(title: str):
     with ui.header().classes('items-center justify-between'):
         ui.label(title)
 
         with ui.row():
+            yield
             ui.button(on_click=lambda: ui.navigate.to("/newevent"), icon='add')
             ui.button(on_click=lambda: ui.navigate.to("/participants"), icon='people')
             ui.button(on_click=lambda: ui.navigate.to("/settings"), icon='settings')
@@ -285,14 +288,48 @@ def navbar(title: str):
                     for date in dates_past:
                         ui.menu_item(date, lambda: ui.navigate.to(f"/event/{date}"))
 
+async def wait_confirm(message: str, ok_icon: str, ok_text: str):
+    with ui.dialog() as dialog, ui.card():
+        ui.label(message)
+        with ui.row():
+            ui.button(ok_text, icon=ok_icon, color="green", on_click=lambda: dialog.submit(True))
+            ui.button("Cancel", icon="cancel", color="red", on_click=lambda: dialog.submit(False))
+
+
+    result = await dialog
+    dialog.clear()
+    return result
+
+
+def edit_event_dialog(event: Event):
+    with ui.dialog() as edit_dialog, ui.card():
+        date_element = ui.date(value=event.date.isoformat())
+        def save():
+            event.date = datetime.date.fromisoformat(date_element.value)
+            edit_dialog.close()
+            ui.navigate.to(f"/event/{event.date.isoformat()}")
+        async def delete():
+            really_delete = await wait_confirm(f"Do you really want to delete the event at {event.date}?", ok_icon="delete", ok_text="Delete")
+            if really_delete:
+                remove_event(event)
+                ui.navigate.to("/")
+            edit_dialog.close()
+        with ui.row():
+            ui.button("save", icon="save", color="positive", on_click=save)
+            ui.button("cancel", icon="cancel", on_click=edit_dialog.close)
+            ui.button("delete", icon="delete", color="warning", on_click=delete)
+    return edit_dialog
+
 @ui.page("/event/{date}")
 def event_page(date: str):
-    navbar(date)
     try:
         event = model.event_by_date(date)
     except KeyError:
         ui.label("no event on this date")
     else:
+        edit_dialog = edit_event_dialog(event)
+        with navbar(date):
+            ui.button(icon="edit", on_click=edit_dialog.open)
         event_statistics(event)
         reservation_list(event)
         add_reservation(event)
@@ -301,7 +338,8 @@ def event_page(date: str):
 
 @ui.page("/newevent")
 def newevent():
-    navbar("new event")
+    with navbar("new event"):
+        pass
     date = ui.date()
     def create():
         d = date.value
@@ -323,6 +361,7 @@ def participant_list():
         for name in model.known_names:
             ui.input(name).bind_value(p.names, name)
         ui.checkbox("add").bind_value(p, "add_default")
+        ui.label(str(len(p.reservations)))
         ui.input("note").bind_value(p, "note")
 
 
@@ -416,15 +455,19 @@ def bulk_import_button(event: Event):
         textarea = ui.textarea(label="import text")
     ui.button("import", icon="file_upload", on_click=dialog.open)
 
- 
+def remove_event(event: Event):
+    model.events.remove(event)
+    model.reservations = [r for r in model.reservations if r.event != event]
 
 @ui.page("/participants")
 def participants():
-    navbar("participant list")
-    with ui.grid(columns=2+len(model.known_names)):
+    with navbar("participant list"):
+        pass
+    with ui.grid(columns=3+len(model.known_names)):
         for name in model.known_names:
             ui.label(name)
         ui.label("add default")
+        ui.label("num events")
         ui.label("note")
 
         participant_list()
@@ -433,7 +476,8 @@ def participants():
 
 @ui.page("/settings")
 def settings():
-    navbar("settings")
+    with navbar("settings"):
+        pass
 
                  
 @ui.page("/")
@@ -442,7 +486,8 @@ def index():
     if len(future_events) > 0:
         ui.navigate.to(f"/event/{future_events[0]}")
     else:
-        navbar("homepage")
+        with navbar("homepage"):
+            pass
         ui.label("no future events planned")
 
 def parse_args():
