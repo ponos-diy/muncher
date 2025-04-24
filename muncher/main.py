@@ -36,12 +36,6 @@ t.foo = True
 print(t.model_dump_json())
 
 
-class ShowedUp(enum.IntEnum):
-    unknown = enum.auto()
-    showed = enum.auto()
-    noshow = enum.auto()
-
-
 
 class Participant(BaseModel):
     uid: UUID = Field(default_factory=uuid4)
@@ -60,26 +54,31 @@ class Event(BaseModel):
     
     reservations: "Reservation" = Field(default_factory=list, exclude=True)
 
-    statistics: dict = Field(default_factory=lambda: {"total": 0, "expected": 0, "cancelled": 0, "shows": 0, "noshows": 0, "unknown": 0}, exclude=True)
+    statistics: dict = Field(default_factory=lambda: {"total": 0, "expected": 0, "cancelled": 0, "shows": 0, "noshows": 0}, exclude=True)
 
     def calculate_statistics(self) -> dict:
-        total = expected = cancelled = shows = noshows = unknown = 0
+        total = sum((r.counter.count_max for r in self.reservations))
+        expected = sum((r.counter.count for r in self.reservations))
+        shows = sum((r.counter.showed for r in self.reservations))
+        noshows = expected - shows
+        cancelled = total - expected
 
-        for r in self.reservations:
-            total += 1
-            if r.cancelled:
-                cancelled += 1
-            else:
-                expected += 1
-                if r.showed_up == ShowedUp.showed:
-                    shows += 1
-                elif r.showed_up == ShowedUp.noshow:
-                    noshows += 1
-                else:
-                    unknown += 1
-        self.statistics.update({"total": total, "expected": expected, "cancelled": cancelled, "shows": shows, "noshows": noshows, "unknown": unknown})
+        self.statistics.update({"total": total, "expected": expected, "cancelled": cancelled, "shows": shows, "noshows": noshows})
 
 
+class Counter(BaseModel):
+    count: int = 1
+    count_max: int = 1
+    showed: int = 0
+
+    def can_cancel(self) -> bool:
+        return self.count > 0
+
+    def can_add_showed(self):
+        return self.showed < self.count
+
+    def can_remove_showed(self):
+        return self.showed > 0
 
 
 class Reservation(BaseModel):
@@ -87,14 +86,38 @@ class Reservation(BaseModel):
     added_time: datetime.datetime = Field(default_factory=datetime.datetime.now)
     source: Optional[str]
 
-    cancelled_internal: bool = False
-    cancelled = make_updateable_prop("cancelled_internal", bool)
+    counter_internal: Counter = Field(default_factory=Counter)
+    counter = make_updateable_prop("counter_internal", Counter)
 
-    showed_up_internal: ShowedUp = ShowedUp.unknown
-    showed_up = make_updateable_prop("showed_up_internal", ShowedUp)
+    """
+    count_internal: int = 1
+    count_max_internal: int = 1
+    showed_internal: int = 0
+
+    count = make_updateable_prop("count_internal", int)
+    count_max = make_updateable_prop("count_max_internal", int)
+    showed = make_updateable_prop("showed_internal", int)
+    """
+
 
     def on_updated(self):
         self.event.calculate_statistics()
+
+    def add_one(self):
+        self.counter = self.counter.model_copy(update=dict(count=self.counter.count+1, count_max=max(self.counter.count+1, self.counter.count_max)))
+        print(self.counter)
+
+    def cancel_one(self):
+        if self.counter.can_cancel():
+            self.counter = self.counter.model_copy(update=dict(count=self.counter.count-1, showed=min(self.counter.count-1, self.counter.showed)))
+
+    def add_showed(self):
+        if self.counter.can_add_showed():
+            self.counter = self.counter.model_copy(update=dict(showed=self.counter.showed+1))
+
+    def remove_showed(self):
+        if self.counter.can_remove_showed():
+            self.counter = self.counter.model_copy(update=dict(showed=self.counter.showed-1))
 
     note: str = ""
 
@@ -219,9 +242,8 @@ statistics_colors = {
         "total": "blue",
         "expected": "blue",
         "shows": "green",
-        "noshows": "yellow",
+        "noshows": "#FFA0A0",
         "cancelled": "lightgrey",
-        "unknown": "grey",
         }
 
 def event_statistics(event: Event):
@@ -234,26 +256,34 @@ def event_statistics(event: Event):
         make_element("done", "shows")
         make_element("remove_circle_outline", "noshows")
         make_element("delete", "cancelled")
-        make_element("question_mark", "unknown")
+
+plus_minus_props = "size=s padding=0"
 
 
 @ui.refreshable
 def reservation_list(event: Event):
-    with ui.grid(columns="2fr 50px 120px 100px 1fr 1fr").classes("gap-0 w-full"):
+    with ui.grid(columns="2fr 100px 100px 100px 1fr 1fr").classes("gap-0 w-full"):
         ui.label("name") 
-        ui.label("cancel")
-        ui.label("showed")
+        ui.label("count")
+        ui.label("shows")
         ui.label("medium")
         ui.label("event note")
         ui.label("participant note")
-        for reservation in event.reservations:
-            participant = reservation.participant
+        for r in event.reservations:
+            participant = r.participant
             ui.label(participant.all_names())
-            ui.checkbox("").bind_value(reservation, "cancelled")
-            ui.toggle({ShowedUp.unknown: "?", ShowedUp.showed: "Y", ShowedUp.noshow: "N"}, on_change=event.calculate_statistics()).bind_value(reservation, "showed_up")
-            #ui.select({ShowedUp.unknown: "?", ShowedUp.showed: "Y", ShowedUp.noshow: "N"}, on_change=event.calculate_statistics()).bind_value(reservation, "showed_up")
-            ui.label(reservation.source)
-            ui.input().props("dense").bind_value(reservation, "note")
+            with ui.row(wrap=False):
+                ui.label().bind_text_from(r, "counter", backward=lambda c: c.count)
+                with ui.button_group().props("rounded"):
+                    ui.button(icon="add", on_click=r.add_one).props(plus_minus_props)
+                    ui.button(icon="remove", on_click=r.cancel_one).bind_enabled_from(r, "counter", backward=Counter.can_cancel).props(plus_minus_props)
+            with ui.row(wrap=False):
+                ui.label().bind_text_from(r, "counter", backward=lambda c: c.showed)
+                with ui.button_group().props("rounded"):
+                    ui.button(icon="add", on_click=r.add_showed).bind_enabled_from(r, "counter", backward=Counter.can_add_showed).props(plus_minus_props)
+                    ui.button(icon="remove", on_click=r.remove_showed).bind_enabled_from(r, "counter", backward=Counter.can_remove_showed).props(plus_minus_props)
+            ui.label(r.source)
+            ui.input().props("dense").bind_value(r, "note")
             ui.input().props("dense").bind_value(participant, "note")
 
 def add_reservation(event: Event):
@@ -549,7 +579,7 @@ def settings():
 def statistics():
     with navbar("statistics"):
         pass
-    fields = ("total", "shows", "noshows", "unknown", "cancelled")
+    fields = ("total", "shows", "noshows", "cancelled")
     with ui.grid(columns=1+len(fields)):
         ui.label("date")
         for f in fields:
