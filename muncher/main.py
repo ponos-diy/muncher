@@ -367,6 +367,7 @@ def main():
     args = parse_args()
     data_store = BackupSave(folder=args.folder, basename="data.json", validator=Model.model_validate_json)
     load(data_store)
+    ui.timer(10.0, lambda: save(data_store))
     app.on_shutdown(lambda: save(data_store))
     ui.run(host=args.host)
 
