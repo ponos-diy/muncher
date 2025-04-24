@@ -11,18 +11,24 @@ from nicegui import app, ui
 
 from backup_save import BackupSave
 
+def make_updateable_prop(internal_name: str, T):
+    def setx(self, value: T):
+        setattr(self, internal_name, value)
+        self.on_updated()
+
+    def getx(self) -> T:
+        return getattr(self, internal_name)
+
+    return computed_field(property(fget=getx, fset=setx))
+
+
 class Test(BaseModel):
     internal_value: bool = Field(default=False, exclude=True)
 
-    @computed_field
-    @property
-    def foo(self)-> bool:
-        return self.internal_value
-    
-    @foo.setter
-    def foo(self, value: bool):
-        self.internal_value = value
-        print(f"called setter with {value}")
+    foo = make_updateable_prop("internal_value", bool)
+
+    def on_updated(self):
+        print("called on_updated")
 
 t=Test(foo=False)
 print("instantiated")
@@ -82,28 +88,12 @@ class Reservation(BaseModel):
     source: Optional[str]
 
     cancelled_internal: bool = False
-
-    @computed_field
-    @property
-    def cancelled(self) -> bool:
-        return self.cancelled_internal
-
-    @cancelled.setter
-    def cancelled(self, value: bool):
-        self.cancelled_internal = value
-        self.event.calculate_statistics()
-
-    
+    cancelled = make_updateable_prop("cancelled_internal", bool)
 
     showed_up_internal: ShowedUp = ShowedUp.unknown
-    @computed_field
-    @property
-    def showed_up(self) -> ShowedUp:
-        return self.showed_up_internal
+    showed_up = make_updateable_prop("showed_up_internal", ShowedUp)
 
-    @showed_up.setter
-    def showed_up(self, value: ShowedUp):
-        self.showed_up_internal = value
+    def on_updated(self):
         self.event.calculate_statistics()
 
     note: str = ""
