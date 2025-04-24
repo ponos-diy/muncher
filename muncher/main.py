@@ -54,7 +54,7 @@ class Event(BaseModel):
     
     reservations: "Reservation" = Field(default_factory=list, exclude=True)
 
-    statistics: dict = Field(default_factory=dict, exclude=True)
+    statistics: dict = Field(default_factory=lambda: {"total": 0, "expected": 0, "cancelled": 0, "shows": 0, "noshows": 0, "unknown": 0}, exclude=True)
 
     def calculate_statistics(self) -> dict:
         total = expected = cancelled = shows = noshows = unknown = 0
@@ -278,6 +278,7 @@ def navbar(title: str):
             ui.button(on_click=lambda: ui.navigate.to("/newevent"), icon='add')
             ui.button(on_click=lambda: ui.navigate.to("/participants"), icon='people')
             ui.button(on_click=lambda: ui.navigate.to("/settings"), icon='settings')
+            ui.button(on_click=lambda: ui.navigate.to("/statistics"), icon='bar_chart')
 
             with ui.button(icon="event"):
                 with ui.menu() as menu:
@@ -459,6 +460,17 @@ def remove_event(event: Event):
     model.events.remove(event)
     model.reservations = [r for r in model.reservations if r.event != event]
 
+def purge_participants():
+    model.participants = [p for p in model.participants if len(p.reservations) > 0]
+
+def purge_participant_button():
+    async def purge():
+        really_purge = await wait_confirm("Do you really want to purge the participant list?", ok_text="purge", ok_icon="delete")
+        if really_purge:
+            purge_participants()
+            participant_list.refresh()
+    ui.button("purge participants with no events", icon="delete", color="warning", on_click=purge)
+
 @ui.page("/participants")
 def participants():
     with navbar("participant list"):
@@ -472,6 +484,7 @@ def participants():
 
         participant_list()
         add_participant()
+    purge_participant_button()
 
 
 @ui.page("/settings")
@@ -479,7 +492,27 @@ def settings():
     with navbar("settings"):
         pass
 
-                 
+@ui.page("/statistics")
+def statistics():
+    with navbar("statistics"):
+        pass
+    with ui.grid(columns=5):
+        ui.label("date")
+        ui.label("reservations")
+        ui.label("cancelled")
+        ui.label("showed")
+        ui.label("noshow")
+
+        _, past_events = get_event_dates()
+        for event_date in past_events:
+            event = model.event_by_date(event_date)
+            ui.label(event_date)
+            ui.label(event.statistics["total"])
+            ui.label(event.statistics["cancelled"])
+            ui.label(event.statistics["shows"])
+            ui.label(event.statistics["noshows"])
+
+
 @ui.page("/")
 def index():
     future_events, _ = get_event_dates()
