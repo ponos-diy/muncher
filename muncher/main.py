@@ -213,17 +213,26 @@ def connect():
 def save(data_store):
     data_store.save(model.model_dump_json(indent=2))
 
+statistics_colors = {
+        "total": "blue",
+        "expected": "blue",
+        "shows": "green",
+        "noshows": "lightyellow",
+        "cancelled": "lightgrey",
+        "unknown": "grey",
+        }
+
 def event_statistics(event: Event):
-    def make_element(icon, color, data_field):
-        ui.button(icon=icon, color=color).bind_text(event.statistics, data_field).set_enabled(False)
+    def make_element(icon, data_field):
+        ui.button(icon=icon, color=statistics_colors[data_field]).bind_text(event.statistics, data_field).set_enabled(False)
         #ui.chip(icon=icon, color=color).bind_text(event.statistics, data_field)
 
     with ui.row():
-        make_element("list", "blue", "expected")
-        make_element("done", "green", "shows")
-        make_element("remove_circle_outline", "grey", "noshows")
-        make_element("delete", "grey", "cancelled")
-        make_element("question_mark", "grey", "unknown")
+        make_element("list", "expected")
+        make_element("done", "shows")
+        make_element("remove_circle_outline", "noshows")
+        make_element("delete", "cancelled")
+        make_element("question_mark", "unknown")
 
 
 @ui.refreshable
@@ -267,8 +276,8 @@ def add_reservation(event: Event):
 
 
 def get_event_dates():
-    dates_future = sorted((event.date for event in model.events if event.date + datetime.timedelta(days=2) > datetime.date.today()))
-    dates_past = reversed(sorted((event.date for event in model.events if event.date + datetime.timedelta(days=2) <= datetime.date.today())))
+    dates_future = list(sorted((event.date for event in model.events if event.date + datetime.timedelta(days=2) > datetime.date.today())))
+    dates_past = list(reversed(sorted((event.date for event in model.events if event.date + datetime.timedelta(days=2) <= datetime.date.today()))))
     return dates_future, dates_past
 
 @contextmanager
@@ -287,10 +296,10 @@ def navbar(title: str):
                 with ui.menu() as menu:
                     dates_future, dates_past = get_event_dates()
                     for date in dates_future:
-                        ui.menu_item(date, lambda: ui.navigate.to(f"/event/{date}"))
+                        ui.menu_item(date, lambda date=date: ui.navigate.to(f"/event/{date}"))
                     ui.separator()
                     for date in dates_past:
-                        ui.menu_item(date, lambda: ui.navigate.to(f"/event/{date}"))
+                        ui.menu_item(date, lambda date=date: ui.navigate.to(f"/event/{date}"))
 
 async def wait_confirm(message: str, ok_icon: str, ok_text: str):
     with ui.dialog() as dialog, ui.card():
@@ -308,7 +317,7 @@ async def wait_confirm(message: str, ok_icon: str, ok_text: str):
 def edit_event_dialog(event: Event):
     with ui.dialog() as edit_dialog, ui.card():
         date_element = ui.date(value=event.date.isoformat())
-        def save():
+        def save_event():
             event.date = datetime.date.fromisoformat(date_element.value)
             edit_dialog.close()
             ui.navigate.to(f"/event/{event.date.isoformat()}")
@@ -319,7 +328,7 @@ def edit_event_dialog(event: Event):
                 ui.navigate.to("/")
             edit_dialog.close()
         with ui.row():
-            ui.button("save", icon="save", color="positive", on_click=save)
+            ui.button("save", icon="save", color="positive", on_click=save_event)
             ui.button("cancel", icon="cancel", on_click=edit_dialog.close)
             ui.button("delete", icon="delete", color="warning", on_click=delete)
     return edit_dialog
@@ -373,7 +382,7 @@ def add_participant():
     name_inputs = {}
     for name in model.known_names:
         name_inputs[name] = ui.input(name)
-    def save():
+    def save_participant():
         names = {k: v.value for k, v in name_inputs.items()}
         if len([n for n in names.values() if n]) == 0:
             ui.notify("fill out at least one name", type="negative")
@@ -383,7 +392,7 @@ def add_participant():
             for v in name_inputs.values():
                 v.value = ""
             participant_list.refresh()
-    ui.button("add", on_click=save)
+    ui.button("add", on_click=save_participant)
     ui.label("")
 
 class ImportFailed(RuntimeError):
@@ -499,21 +508,32 @@ def settings():
 def statistics():
     with navbar("statistics"):
         pass
-    with ui.grid(columns=5):
+    fields = ("total", "cancelled", "shows", "noshows", "unknown")
+    with ui.grid(columns=1+len(fields)):
         ui.label("date")
-        ui.label("reservations")
-        ui.label("cancelled")
-        ui.label("showed")
-        ui.label("noshow")
+        for f in fields:
+            ui.label(f)
 
         _, past_events = get_event_dates()
+        data = {f: [] for f in fields}
         for event_date in past_events:
             event = model.event_by_date(event_date)
             ui.label(event_date)
-            ui.label(event.statistics["total"])
-            ui.label(event.statistics["cancelled"])
-            ui.label(event.statistics["shows"])
-            ui.label(event.statistics["noshows"])
+            for f in fields:
+                ui.label(event.statistics[f])
+                data[f].append(event.statistics[f])
+
+
+    ui.echart({
+        "xAxis": {"type": "category", "data": past_events},
+        "yAxis": {
+            "type": "value"
+            },
+        "series": [
+            {"type": "bar", "stack": "" if f=="total" else "Ad", "name": f, "data": data[f], "color": statistics_colors[f]}
+            for f in fields if f!= "total"]
+        })
+    
 
 
 @ui.page("/")
