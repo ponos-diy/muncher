@@ -498,11 +498,25 @@ def participants():
         add_participant()
     purge_participant_button()
 
+def restore_backup(event):
+    data = event.content.read()
+    global model
+    try:
+        new_model = Model.model_validate_json(data)
+    except RuntimeError as e:
+        ui.notify(f"Restoring backup failed: {e}", type="negative")
+    else:
+        model = new_model
+        ui.notify("backup restored")
+        ui.navigate.to("/")
 
 @ui.page("/settings")
 def settings():
     with navbar("settings"):
         pass
+
+    ui.button("download backup", icon="download", on_click=lambda: ui.download("/backup"))
+    ui.upload(on_upload=restore_backup, label="restore backup", multiple=False, max_files=1)
 
 @ui.page("/statistics")
 def statistics():
@@ -531,9 +545,15 @@ def statistics():
             },
         "series": [
             {"type": "bar", "stack": "" if f=="total" else "Ad", "name": f, "data": data[f], "color": statistics_colors[f]}
-            for f in fields if f!= "total"]
+            for f in fields if f!= "total"],
+        "legend": {}
         })
     
+@app.get("/backup")
+def backup():
+    dump = model.model_dump()
+    print(dump)
+    return dump
 
 
 @ui.page("/")
