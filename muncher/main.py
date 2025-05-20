@@ -300,6 +300,7 @@ def add_reservation(event: Event):
             except KeyError:
                 r = Reservation.make(event=event, participant=p, source=source_select.value)
                 model.reservations.append(r)
+                event.calculate_statistics()
                 reservation_list.refresh()
             else:
                 ui.notify("participant already added", type="negative")
