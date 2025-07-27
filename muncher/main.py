@@ -1,10 +1,12 @@
 import enum
 import datetime
 import argparse
+import csv
 from typing import Optional
 from uuid import UUID, uuid4
 import json
 from contextlib import contextmanager
+import io
 
 from pydantic import BaseModel, Field, computed_field
 from nicegui import app, ui
@@ -439,9 +441,8 @@ async def import_fl(data: str, event: Event):
     new_participants = []
     new_reservations = []
     import_names = []
-    for line in data.splitlines():
-        name = line
-        import_names.append(name)
+    buffer = io.StringIO(data)
+    reader = csv.DictReader(buffer)
 
     with ui.dialog() as confirm_dialog, ui.card():
         with ui.grid(columns=3):
@@ -449,7 +450,10 @@ async def import_fl(data: str, event: Event):
             ui.icon("people")
             ui.icon("event")
 
-            for name in import_names:
+            for row in reader:
+                if row["Status"] not in ("Going", "Interested"):
+                    continue
+                name = row["Nickname"]
                 ui.label(name)
                 try:
                     p = model.get_participant_by_name(name, name_source="FL")
@@ -466,6 +470,11 @@ async def import_fl(data: str, event: Event):
                     r = Reservation(event=event, participant=p, event_uid=event.uid, participant_uid=p.uid, source="FL-import")
                     new_reservations.append(r)
                     ui.icon("add_circle", color="green")
+                    if row["Status"] != "Going":
+                        if r.counter.can_cancel():
+                            r.cancel_one()
+                        if not r.note:
+                            r.note = "maybe"
         with ui.row():
             ui.button("Import", icon="check", color="green", on_click=lambda: confirm_dialog.submit(True))
             ui.button("Cancel", icon="cancel", color="red", on_click=lambda: confirm_dialog.submit(False))
