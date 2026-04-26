@@ -11,7 +11,7 @@ import io
 from pydantic import BaseModel, Field, computed_field
 from nicegui import app, ui
 
-from backup_save import BackupSave
+from muncher.backup_save import BackupSave
 
 def make_updateable_prop(internal_name: str, T):
     def setx(self, value: T):
@@ -31,12 +31,6 @@ class Test(BaseModel):
 
     def on_updated(self):
         print("called on_updated")
-
-t=Test(foo=False)
-print("instantiated")
-t.foo = True
-print(t.model_dump_json())
-
 
 
 class Participant(BaseModel):
@@ -644,10 +638,14 @@ def main():
     args = parse_args()
     data_store = BackupSave(folder=args.folder, basename="data.json", validator=Model.model_validate_json)
     load(data_store)
+    app.on_startup(startup_actions)
+    app.on_shutdown(lambda: save(data_store))
+    ui.run(host=args.host, title="muncher", reload=False)
+
+def startup_actions():
     ui.timer(10.0, lambda: save(data_store))
     ui.timer(24*3600.0, auto_clean_action)
-    app.on_shutdown(lambda: save(data_store))
-    ui.run(host=args.host, title="muncher")
 
-main()
+if __name__ == '__main__':
+    main()
 
