@@ -32,7 +32,7 @@ click==8.4.1
     # via uvicorn
 docutils==0.23
     # via nicegui
-fastapi==0.136.3
+fastapi==0.137.1
     # via nicegui
 frozenlist==1.8.0
     # via
