@@ -113,7 +113,7 @@ starlette==1.3.1
     #   nicegui
 tinycss2==1.5.1
     # via nicegui
-typing-extensions==4.15.0
+typing-extensions==4.16.0
     # via
     #   fastapi
     #   nicegui
