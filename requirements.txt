@@ -132,7 +132,7 @@ watchfiles==1.2.0
     # via
     #   nicegui
     #   uvicorn
-webencodings==0.5.1
+webencodings==0.6.1
     # via tinycss2
 websockets==17.0.1
     # via uvicorn
