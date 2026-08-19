@@ -91,7 +91,7 @@ pydantic-core==2.48.0
     #   pydantic
 pygments==2.20.0
     # via nicegui
-python-dotenv==1.2.2
+python-dotenv==1.2.3
     # via
     #   nicegui
     #   uvicorn
