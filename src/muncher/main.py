@@ -537,8 +537,8 @@ def participants():
         add_participant()
     purge_participant_button()
 
-def restore_backup(event):
-    data = event.content.read()
+async def restore_backup(event):
+    data = await event.file.text()
     global model
     try:
         new_model = Model.model_validate_json(data)
@@ -546,6 +546,7 @@ def restore_backup(event):
         ui.notify(f"Restoring backup failed: {e}", type="negative")
     else:
         model = new_model
+        connect()
         ui.notify("backup restored")
         ui.navigate.to("/")
 
