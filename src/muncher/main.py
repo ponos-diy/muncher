@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 import json
 from contextlib import contextmanager
 import io
+from importlib.metadata import version
 
 from pydantic import BaseModel, Field, computed_field
 from nicegui import app, ui
@@ -329,6 +330,9 @@ def navbar(title: str):
                     ui.separator()
                     for date in dates_past:
                         ui.menu_item(date, lambda date=date: ui.navigate.to(f"/event/{date}"))
+    with ui.footer():
+        v = version("muncher")
+        ui.label(f"muncher {v}")
 
 async def wait_confirm(message: str, ok_icon: str, ok_text: str):
     with ui.dialog() as dialog, ui.card():
