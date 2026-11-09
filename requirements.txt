@@ -72,7 +72,7 @@ multidict==7.2.1
     #   aiohttp
     #   nicegui
     #   yarl
-nicegui==3.19.0
+nicegui==4.0.0
     # via muncher (src/pyproject.toml)
 opentelemetry-api==1.45.2
     # via fastapi
@@ -82,9 +82,9 @@ propcache==0.5.4
     # via
     #   aiohttp
     #   yarl
-pydantic==2.14.2
+pydantic==2.14.3
     # via fastapi
-pydantic-core==2.50.2
+pydantic-core==2.50.4
     # via
     #   nicegui
     #   pydantic
@@ -119,7 +119,7 @@ typing-extensions==4.16.0
     #   pydantic
     #   pydantic-core
     #   typing-inspection
-typing-inspection==0.4.4
+typing-inspection==0.4.5
     # via
     #   fastapi
     #   pydantic
