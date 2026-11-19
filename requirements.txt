@@ -96,7 +96,7 @@ python-dotenv==1.2.4
     #   uvicorn
 python-engineio==4.15.1
     # via python-socketio
-python-multipart==0.0.33
+python-multipart==0.0.34
     # via nicegui
 python-socketio==5.18.1
     # via nicegui
