@@ -72,7 +72,7 @@ multidict==7.2.1
     #   aiohttp
     #   nicegui
     #   yarl
-nicegui==4.0.0
+nicegui==4.1.0
     # via muncher (src/pyproject.toml)
 opentelemetry-api==1.45.2
     # via fastapi
